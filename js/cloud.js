@@ -4,6 +4,7 @@ import { getDecks, getCards, getSettings, getHistory } from './data.js';
 
 const SYNC_KEY_STORAGE = 'vocaFlash_syncKey';
 const LAST_SYNC_STORAGE = 'vocaFlash_lastSyncTime';
+const ALIAS_PREFIX = 'vocaFlash_alias_';
 
 const API_URL = 'https://api.restful-api.dev/objects';
 
@@ -12,7 +13,7 @@ export function getSyncKey() {
 }
 
 export function setSyncKey(key) {
-  const cleanKey = (key || '').trim();
+  const cleanKey = (key || '').trim().toLowerCase();
   if (cleanKey) {
     localStorage.setItem(SYNC_KEY_STORAGE, cleanKey);
   } else {
@@ -29,6 +30,22 @@ function updateLastSyncTime() {
   const now = new Date().toISOString();
   localStorage.setItem(LAST_SYNC_STORAGE, now);
   return now;
+}
+
+function getMappedCloudId(syncKey) {
+  if (!syncKey) return null;
+  // If it looks like a direct 32-char hex ID, use it directly
+  if (/^[a-f0-9]{32}$/i.test(syncKey)) {
+    return syncKey;
+  }
+  // Otherwise check if we have a local alias mapping
+  return localStorage.getItem(ALIAS_PREFIX + syncKey) || null;
+}
+
+function setMappedCloudId(syncKey, cloudId) {
+  if (syncKey && cloudId) {
+    localStorage.setItem(ALIAS_PREFIX + syncKey, cloudId);
+  }
 }
 
 /**
@@ -57,6 +74,8 @@ export async function createNewSyncSlot() {
     const result = await res.json();
     if (!result.id) throw new Error('Máy chủ không phản hồi ID');
 
+    const syncKey = getSyncKey() || 'my_sync';
+    setMappedCloudId(syncKey, result.id);
     setSyncKey(result.id);
     updateLastSyncTime();
     return { success: true, syncId: result.id, message: `Đã tạo Mã Đồng Bộ mới: ${result.id}` };
@@ -70,42 +89,64 @@ export async function createNewSyncSlot() {
  */
 export async function pushToCloud() {
   let syncKey = getSyncKey();
-
-  // If no sync key exists, create one automatically on push
   if (!syncKey) {
-    const createRes = await createNewSyncSlot();
-    if (!createRes.success) return createRes;
-    syncKey = createRes.syncId;
+    return await createNewSyncSlot();
   }
 
-  try {
-    const payload = {
-      updatedAt: new Date().toISOString(),
-      decks: getDecks(),
-      cards: getCards(),
-      settings: getSettings(),
-      history: getHistory(),
-    };
+  let cloudId = getMappedCloudId(syncKey);
 
-    const res = await fetch(`${API_URL}/${encodeURIComponent(syncKey)}`, {
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    decks: getDecks(),
+    cards: getCards(),
+    settings: getSettings(),
+    history: getHistory(),
+  };
+
+  try {
+    // If no cloud ID exists for this key, create a new one via POST
+    if (!cloudId) {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `vocaflash_${syncKey}`,
+          data: { content: JSON.stringify(payload) },
+        }),
+      });
+
+      if (!res.ok) throw new Error('Không thể khởi tạo dữ liệu đám mây');
+      const result = await res.json();
+      if (!result.id) throw new Error('Lỗi phản hồi máy chủ');
+
+      cloudId = result.id;
+      setMappedCloudId(syncKey, cloudId);
+      setSyncKey(cloudId); // set as active sync ID
+      updateLastSyncTime();
+      return { success: true, syncId: cloudId, message: `Đã khởi tạo và đẩy dữ liệu lên đám mây với mã ID: "${cloudId}"` };
+    }
+
+    // Existing cloud ID -> Update via PUT
+    const res = await fetch(`${API_URL}/${encodeURIComponent(cloudId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: 'vocaflash_sync_data',
+        name: `vocaflash_${syncKey}`,
         data: { content: JSON.stringify(payload) },
       }),
     });
 
     if (!res.ok) {
-      // If 404, the cloud ID might have expired — re-create a slot
       if (res.status === 404) {
-        return await createNewSyncSlot();
+        // If 404, re-create slot
+        localStorage.removeItem(ALIAS_PREFIX + syncKey);
+        return await pushToCloud();
       }
       throw new Error('Không thể tải dữ liệu lên đám mây');
     }
 
     updateLastSyncTime();
-    return { success: true, syncId: syncKey, message: 'Đẩy dữ liệu lên đám mây thành công!' };
+    return { success: true, syncId: cloudId, message: `Đẩy dữ liệu lên đám mây thành công! Mã ID: ${cloudId}` };
   } catch (e) {
     return { success: false, message: e.message || 'Lỗi đẩy dữ liệu lên đám mây' };
   }
@@ -116,13 +157,15 @@ export async function pushToCloud() {
  */
 export async function pullFromCloud() {
   const syncKey = getSyncKey();
-  if (!syncKey) return { success: false, message: 'Chưa cài đặt Mã Đồng Bộ' };
+  if (!syncKey) return { success: false, message: 'Chưa nhập Mã Đồng Bộ (Sync ID)' };
+
+  const cloudId = getMappedCloudId(syncKey) || syncKey;
 
   try {
-    const res = await fetch(`${API_URL}/${encodeURIComponent(syncKey)}`);
+    const res = await fetch(`${API_URL}/${encodeURIComponent(cloudId)}`);
     if (!res.ok) {
       if (res.status === 404) {
-        throw new Error('Mã Đồng Bộ không tồn tại hoặc đã hết hạn');
+        throw new Error(`Mã Đồng Bộ "${syncKey}" chưa tồn tại hoặc đã hết hạn. Hãy bấm Đẩy Lên (Push) trên máy có từ vựng trước.`);
       }
       throw new Error('Lỗi kết nối đám mây');
     }
@@ -148,8 +191,10 @@ export async function pullFromCloud() {
       localStorage.setItem('vocaFlash_studyHistory', JSON.stringify(data.history));
     }
 
+    // Save alias mapping
+    setMappedCloudId(syncKey, cloudId);
     updateLastSyncTime();
-    return { success: true, message: 'Tải dữ liệu đồng bộ thành công!' };
+    return { success: true, message: `Tải thành công dữ liệu từ đám mây!` };
   } catch (e) {
     return { success: false, message: e.message || 'Lỗi tải dữ liệu từ đám mây' };
   }
