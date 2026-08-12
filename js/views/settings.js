@@ -49,32 +49,27 @@ export function renderSettings(container) {
       </div>
 
       <div class="settings-section">
-        <h2>⚡ Đồng bộ Siêu Tốc (Laptop ↔ Điện thoại)</h2>
+        <h2>☁️ Đồng bộ Đám mây (Laptop ↔ Điện thoại)</h2>
         <div class="settings-item">
           <div class="settings-item-info">
-            <label>1. Lấy Mã Đồng Bộ từ máy này</label>
-            <span class="settings-desc">Bấm để copy mã dữ liệu từ thiết bị này (Laptop) mang sang Điện thoại</span>
-          </div>
-          <div class="settings-item-control">
-            <button class="btn btn-primary btn-sm" id="btnCopyQuickCode">📋 Copy Mã Đồng Bộ</button>
-          </div>
-        </div>
-        <div class="settings-item">
-          <div class="settings-item-info">
-            <label>2. Nhập Mã Đồng Bộ vào thiết bị này</label>
-            <span class="settings-desc">Dán Mã Đồng Bộ (bắt đầu bằng VOCA1_...) vào đây để tải dữ liệu về</span>
+            <label>Mã Đồng Bộ Cá Nhân (Sync Key)</label>
+            <span class="settings-desc">Tự đặt mã ngắn dễ nhớ (VD: <strong>phutrong2511</strong>) để dùng chung cho Laptop & Điện thoại</span>
           </div>
           <div class="settings-item-control" style="flex:1; max-width:320px">
             <div class="input-with-btn">
-              <input type="text" id="syncKeyInput" class="form-input form-input-sm" placeholder="Dán mã VOCA1_... vào đây">
-              <button class="btn btn-success btn-sm" id="btnImportQuickCode">📥 Đồng bộ ngay</button>
+              <input type="text" id="syncKeyInput" class="form-input form-input-sm" placeholder="VD: phutrong2511">
+              <button class="btn btn-primary btn-sm" id="btnSaveSyncKey">Lưu mã</button>
             </div>
           </div>
         </div>
         <div class="settings-item" id="syncActionsRow">
           <div class="settings-item-info">
-            <label>Trạng thái</label>
-            <span class="settings-desc" id="syncStatusText">Sẵn sàng đồng bộ</span>
+            <label>Thao tác đồng bộ</label>
+            <span class="settings-desc" id="syncStatusText">Chưa nhập Mã Đồng Bộ</span>
+          </div>
+          <div class="settings-item-control">
+            <button class="btn btn-secondary btn-sm" id="btnPullCloud">📥 Tải về (Pull)</button>
+            <button class="btn btn-primary btn-sm" id="btnPushCloud">📤 Đẩy lên (Push)</button>
           </div>
         </div>
       </div>
@@ -153,32 +148,40 @@ export function renderSettings(container) {
   import('../cloud.js').then(cloud => {
     const syncKeyInput = container.querySelector('#syncKeyInput');
     const syncStatusText = container.querySelector('#syncStatusText');
+    const currentKey = cloud.getSyncKey();
 
-    container.querySelector('#btnCopyQuickCode')?.addEventListener('click', () => {
-      const code = cloud.exportQuickSyncCode();
-      if (code) {
-        navigator.clipboard.writeText(code).then(() => {
-          syncStatusText.textContent = '✅ Đã sao chép Mã Đồng Bộ vào clipboard! Hãy dán sang Điện thoại.';
-          alert('Đã copy Mã Đồng Bộ! Hãy mở Zalo/Ghi chú để gửi mã này sang Điện thoại.');
-        }).catch(() => {
-          prompt('Mã Đồng Bộ của bạn (hãy bôi đen và copy):', code);
-        });
+    if (currentKey) {
+      syncKeyInput.value = currentKey;
+      const lastTime = cloud.getLastSyncTime();
+      syncStatusText.textContent = `Mã hiện tại: "${currentKey}" ${lastTime ? `(Đồng bộ lúc: ${new Date(lastTime).toLocaleTimeString('vi-VN')})` : ''}`;
+    }
+
+    container.querySelector('#btnSaveSyncKey')?.addEventListener('click', async () => {
+      const newKey = syncKeyInput.value.trim();
+      const savedKey = cloud.setSyncKey(newKey);
+      if (savedKey) {
+        syncStatusText.textContent = `Đã lưu mã "${savedKey}". Bạn có thể bấm Đẩy Lên hoặc Tải Về.`;
+        alert(`Đã lưu Mã Đồng Bộ cá nhân: "${savedKey}"`);
       } else {
-        alert('Không có dữ liệu để đồng bộ.');
+        syncStatusText.textContent = 'Chưa nhập Mã Đồng Bộ';
+        alert('Đã xóa Mã Đồng Bộ.');
       }
     });
 
-    container.querySelector('#btnImportQuickCode')?.addEventListener('click', () => {
-      const code = syncKeyInput.value.trim();
-      if (!code) {
-        alert('Vui lòng dán Mã Đồng Bộ (bắt đầu bằng VOCA1_...) vào ô trước khi bấm nút.');
-        return;
-      }
-      const res = cloud.importQuickSyncCode(code);
+    container.querySelector('#btnPullCloud')?.addEventListener('click', async () => {
+      syncStatusText.textContent = '⏳ Đang tải dữ liệu từ đám mây...';
+      const res = await cloud.pullFromCloud();
+      alert(res.message);
+      syncStatusText.textContent = res.success ? '✅ Đã tải xong dữ liệu mới!' : res.message;
+      if (res.success) renderSettings(container);
+    });
+
+    container.querySelector('#btnPushCloud')?.addEventListener('click', async () => {
+      syncStatusText.textContent = '⏳ Đang đẩy dữ liệu lên đám mây...';
+      const res = await cloud.pushToCloud();
       alert(res.message);
       if (res.success) {
-        syncStatusText.textContent = '✅ Đã đồng bộ dữ liệu mới thành công!';
-        renderSettings(container);
+        syncStatusText.textContent = `✅ Đã đẩy thành công dữ liệu lên mã: "${res.syncKey}"`;
       } else {
         syncStatusText.textContent = res.message;
       }
