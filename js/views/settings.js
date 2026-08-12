@@ -52,14 +52,23 @@ export function renderSettings(container) {
         <h2>☁️ Đồng bộ Đám mây (Laptop ↔ Điện thoại)</h2>
         <div class="settings-item">
           <div class="settings-item-info">
-            <label>Mã Đồng Bộ (Sync Key)</label>
-            <span class="settings-desc">Nhập cùng mã này trên tất cả điện thoại & laptop của bạn</span>
+            <label>Mã Đồng Bộ (Sync ID)</label>
+            <span class="settings-desc">Tạo mã trên Laptop, sau đó nhập mã này trên Điện thoại để đồng bộ</span>
           </div>
-          <div class="settings-item-control" style="flex:1; max-width:260px">
+          <div class="settings-item-control" style="flex:1; max-width:320px">
             <div class="input-with-btn">
-              <input type="text" id="syncKeyInput" class="form-input form-input-sm" placeholder="VD: phutrong-2026">
+              <input type="text" id="syncKeyInput" class="form-input form-input-sm" placeholder="Dán Mã Đồng Bộ vào đây...">
               <button class="btn btn-primary btn-sm" id="btnSaveSyncKey">Lưu mã</button>
             </div>
+          </div>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <label>Tạo mã mới</label>
+            <span class="settings-desc">Tạo một đám mây đồng bộ mới cho thiết bị này</span>
+          </div>
+          <div class="settings-item-control">
+            <button class="btn btn-secondary btn-sm" id="btnCreateSyncKey">✨ Tạo mã mới</button>
           </div>
         </div>
         <div class="settings-item" id="syncActionsRow">
@@ -153,17 +162,30 @@ export function renderSettings(container) {
     if (currentKey) {
       syncKeyInput.value = currentKey;
       const lastTime = cloud.getLastSyncTime();
-      syncStatusText.textContent = `Đang đồng bộ với mã: ${currentKey} ${lastTime ? `(Lần cuối: ${new Date(lastTime).toLocaleTimeString('vi-VN')})` : ''}`;
+      syncStatusText.textContent = `Đang đồng bộ với mã ID: ${currentKey} ${lastTime ? `(Lần cuối: ${new Date(lastTime).toLocaleTimeString('vi-VN')})` : ''}`;
     }
 
+    container.querySelector('#btnCreateSyncKey')?.addEventListener('click', async () => {
+      syncStatusText.textContent = '⏳ Đang tạo Mã Đồng Bộ mới...';
+      const res = await cloud.createNewSyncSlot();
+      alert(res.message);
+      if (res.success) {
+        syncKeyInput.value = res.syncId;
+        syncStatusText.textContent = `Đã tạo & kết nối mã ID: ${res.syncId}`;
+      } else {
+        syncStatusText.textContent = res.message;
+      }
+    });
+
     container.querySelector('#btnSaveSyncKey')?.addEventListener('click', async () => {
-      const newKey = syncKeyInput.value;
+      const newKey = syncKeyInput.value.trim();
       const savedKey = cloud.setSyncKey(newKey);
       if (savedKey) {
-        syncStatusText.textContent = `⏳ Đang thử đồng bộ mã "${savedKey}"...`;
-        const res = await cloud.autoSync();
-        syncStatusText.textContent = `Đã kết nối mã: ${savedKey}`;
-        alert(`Đã lưu Mã Đồng Bộ: ${savedKey}`);
+        syncStatusText.textContent = `⏳ Đang kiểm tra mã ID "${savedKey}"...`;
+        const res = await cloud.pullFromCloud();
+        alert(res.message);
+        syncStatusText.textContent = res.success ? `Đã kết nối mã ID: ${savedKey}` : res.message;
+        if (res.success) renderSettings(container);
       } else {
         syncStatusText.textContent = 'Chưa đặt Mã Đồng Bộ';
         alert('Đã xóa Mã Đồng Bộ.');
@@ -182,7 +204,12 @@ export function renderSettings(container) {
       syncStatusText.textContent = '⏳ Đang đẩy dữ liệu lên đám mây...';
       const res = await cloud.pushToCloud();
       alert(res.message);
-      syncStatusText.textContent = res.success ? 'Đã đẩy dữ liệu thành công' : res.message;
+      if (res.success && res.syncId) {
+        syncKeyInput.value = res.syncId;
+        syncStatusText.textContent = `Đã đẩy dữ liệu thành công! Mã ID: ${res.syncId}`;
+      } else {
+        syncStatusText.textContent = res.message;
+      }
     });
   });
 

@@ -5,15 +5,14 @@ import { getDecks, getCards, getSettings, getHistory } from './data.js';
 const SYNC_KEY_STORAGE = 'vocaFlash_syncKey';
 const LAST_SYNC_STORAGE = 'vocaFlash_lastSyncTime';
 
-const APP_PREFIX = 'vocaflash_app_2026';
-const CLOUD_BASE = 'https://keyvalue.immanuel.co/api/KeyVal';
+const API_URL = 'https://api.restful-api.dev/objects';
 
 export function getSyncKey() {
-  return localStorage.getItem(SYNC_KEY_STORAGE) || '';
+  return (localStorage.getItem(SYNC_KEY_STORAGE) || '').trim();
 }
 
 export function setSyncKey(key) {
-  const cleanKey = key.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const cleanKey = (key || '').trim();
   if (cleanKey) {
     localStorage.setItem(SYNC_KEY_STORAGE, cleanKey);
   } else {
@@ -32,25 +31,52 @@ function updateLastSyncTime() {
   return now;
 }
 
-// Unicode-safe Base64 encoder/decoder
-function utf8ToBase64(str) {
-  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => {
-    return String.fromCharCode('0x' + p1);
-  }));
-}
+/**
+ * Create a new cloud sync slot and return its ID
+ */
+export async function createNewSyncSlot() {
+  try {
+    const payload = {
+      updatedAt: new Date().toISOString(),
+      decks: getDecks(),
+      cards: getCards(),
+      settings: getSettings(),
+      history: getHistory(),
+    };
 
-function base64ToUtf8(str) {
-  return decodeURIComponent(Array.prototype.map.call(atob(str), (c) => {
-    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-  }).join(''));
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'vocaflash_sync_data',
+        data: payload,
+      }),
+    });
+
+    if (!res.ok) throw new Error('Không thể tạo mã đồng bộ mới');
+    const result = await res.json();
+    if (!result.id) throw new Error('Máy chủ không phản hồi ID');
+
+    setSyncKey(result.id);
+    updateLastSyncTime();
+    return { success: true, syncId: result.id, message: `Đã tạo Mã Đồng Bộ mới thành công!` };
+  } catch (e) {
+    return { success: false, message: e.message || 'Lỗi tạo mã đồng bộ' };
+  }
 }
 
 /**
  * Push local data to cloud
  */
 export async function pushToCloud() {
-  const syncKey = getSyncKey();
-  if (!syncKey) return { success: false, message: 'Chưa cài đặt Mã Đồng Bộ' };
+  let syncKey = getSyncKey();
+
+  // If no sync key exists, create one automatically on push
+  if (!syncKey) {
+    const createRes = await createNewSyncSlot();
+    if (!createRes.success) return createRes;
+    syncKey = createRes.syncId;
+  }
 
   try {
     const payload = {
@@ -61,19 +87,27 @@ export async function pushToCloud() {
       history: getHistory(),
     };
 
-    const jsonStr = JSON.stringify(payload);
-    const base64Data = utf8ToBase64(jsonStr);
-    const encodedVal = encodeURIComponent(base64Data);
+    const res = await fetch(`${API_URL}/${encodeURIComponent(syncKey)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'vocaflash_sync_data',
+        data: payload,
+      }),
+    });
 
-    const updateUrl = `${CLOUD_BASE}/UpdateValue/${APP_PREFIX}/${encodeURIComponent(syncKey)}/${encodedVal}`;
-    const res = await fetch(updateUrl, { method: 'POST' });
-
-    if (!res.ok) throw new Error('Không thể kết nối đến máy chủ đám mây');
+    if (!res.ok) {
+      // If 404, the cloud ID might have expired — re-create a slot
+      if (res.status === 404) {
+        return await createNewSyncSlot();
+      }
+      throw new Error('Không thể tải dữ liệu lên đám mây');
+    }
 
     updateLastSyncTime();
-    return { success: true, message: `Đã đẩy dữ liệu thành công với mã: "${syncKey}"` };
+    return { success: true, syncId: syncKey, message: 'Đẩy dữ liệu lên đám mây thành công!' };
   } catch (e) {
-    return { success: false, message: e.message || 'Không thể tải dữ liệu lên đám mây' };
+    return { success: false, message: e.message || 'Lỗi đẩy dữ liệu lên đám mây' };
   }
 }
 
@@ -85,18 +119,20 @@ export async function pullFromCloud() {
   if (!syncKey) return { success: false, message: 'Chưa cài đặt Mã Đồng Bộ' };
 
   try {
-    const getUrl = `${CLOUD_BASE}/GetValue/${APP_PREFIX}/${encodeURIComponent(syncKey)}`;
-    const res = await fetch(getUrl);
-
-    if (!res.ok) throw new Error('Không thể kết nối máy chủ đám mây');
-
-    const base64Data = await res.json();
-    if (!base64Data || typeof base64Data !== 'string') {
-      return { success: false, message: `Mã "${syncKey}" mới (chưa có dữ liệu trên đám mây). Hãy bấm Đẩy Lên.` };
+    const res = await fetch(`${API_URL}/${encodeURIComponent(syncKey)}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error('Mã Đồng Bộ không tồn tại hoặc đã hết hạn');
+      }
+      throw new Error('Lỗi kết nối đám mây');
     }
 
-    const jsonStr = base64ToUtf8(base64Data);
-    const data = JSON.parse(jsonStr);
+    const result = await res.json();
+    if (!result.data) {
+      throw new Error('Dữ liệu trên đám mây không hợp lệ');
+    }
+
+    const data = result.data;
 
     if (data.decks && Array.isArray(data.decks)) {
       localStorage.setItem('vocaFlash_decks', JSON.stringify(data.decks));
@@ -112,21 +148,17 @@ export async function pullFromCloud() {
     }
 
     updateLastSyncTime();
-    return { success: true, message: `Tải thành công dữ liệu mã: "${syncKey}"` };
+    return { success: true, message: 'Tải dữ liệu đồng bộ thành công!' };
   } catch (e) {
-    return { success: false, message: e.message || 'Không thể tải dữ liệu từ đám mây' };
+    return { success: false, message: e.message || 'Lỗi tải dữ liệu từ đám mây' };
   }
 }
 
 /**
- * Auto sync: pulls first, then pushes if cloud is empty
+ * Auto sync
  */
 export async function autoSync() {
   const syncKey = getSyncKey();
   if (!syncKey) return;
-
-  const pullRes = await pullFromCloud();
-  if (!pullRes.success && pullRes.message.includes('chưa có dữ liệu')) {
-    await pushToCloud();
-  }
+  await pullFromCloud();
 }
