@@ -83,7 +83,7 @@ export function renderDashboard(container) {
             const deckCards = allCards.filter(c => c.deckId === deck.id);
             const deckDue = deckCards.filter(c => isDue(c)).length;
             return `
-              <div class="deck-card" data-deck-id="${deck.id}" style="--deck-color: ${deck.color || '#6C5CE7'}">
+              <div class="deck-card" data-id="${deck.id}" style="--deck-color: ${deck.color || '#6C5CE7'}">
                 <div class="deck-color-bar"></div>
                 <div class="deck-card-body">
                   <h3 class="deck-name">${escapeHtml(deck.name)}</h3>
@@ -140,7 +140,10 @@ export function renderDashboard(container) {
   container.querySelectorAll('.deck-card').forEach(card => {
     card.addEventListener('click', (e) => {
       if (e.target.closest('.btn-deck-delete')) return;
-      location.hash = `#deck/${card.dataset.deckId}`;
+      const deckId = card.getAttribute('data-id') || card.dataset.id || card.dataset.deckId;
+      if (deckId && deckId !== 'undefined') {
+        location.hash = `#deck/${deckId}`;
+      }
     });
   });
 
