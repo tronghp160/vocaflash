@@ -1255,14 +1255,174 @@ input, select, textarea {
 .mode-stat-bar { height: 100%; background: var(--primary); border-radius: var(--radius-full); }
 .mode-stat-count { width: 40px; text-align: right; font-weight: 600; color: var(--text-muted); }
 
-/* Responsive adjustments */
+/* 📱 iOS & iPhone 16 Pro Max Responsive Design System */
 @media (max-width: 600px) {
-  .app { padding: 12px 10px 30px; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
-  .srs-actions { grid-template-columns: repeat(2, 1fr); }
-  .result-stats { grid-template-columns: repeat(2, 1fr); }
-  .modes-grid { grid-template-columns: repeat(3, 1fr); }
-  .flashcard-word { font-size: 1.7rem; }
-  .flashcard-meaning { font-size: 1.3rem; }
-  .quiz-question { font-size: 1.3rem; padding: 16px; }
+  /* Safe Area Insets for Dynamic Island & Home Bar */
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .app {
+    padding: max(14px, env(safe-area-inset-top)) 14px max(34px, env(safe-area-inset-bottom));
+  }
+
+  /* Prevent iOS Safari input focus auto-zoom */
+  input[type="text"],
+  input[type="number"],
+  input[type="search"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Touch Targets (Minimum 44px height for Apple HIG) */
+  .btn, .mode-btn, .quiz-option, .matching-tile, .card-item {
+    min-height: 46px;
+    touch-action: manipulation;
+  }
+
+  .btn:active, .mode-btn:active, .quiz-option:active {
+    transform: scale(0.96);
+  }
+
+  /* Navigation & Header */
+  .app-header {
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+  }
+  .logo { font-size: 1.35rem; }
+
+  /* Dashboard Stats Grid */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .stat-card { padding: 12px 10px; }
+  .stat-value { font-size: 1.5rem; }
+
+  /* Modes Grid on iPhone 16 Pro Max */
+  .modes-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .mode-btn {
+    padding: 12px 8px;
+  }
+  .mode-icon { font-size: 1.5rem; }
+  .mode-name { font-size: 0.78rem; }
+
+  /* Flashcard 3D Sizing for iPhone 16 Pro Max */
+  .flashcard-container {
+    min-height: 340px;
+    margin-bottom: 20px;
+  }
+  .flashcard-3d {
+    min-height: 320px;
+  }
+  .flashcard-face {
+    padding: 24px 18px;
+  }
+  .flashcard-word {
+    font-size: 2.1rem;
+    line-height: 1.25;
+  }
+  .flashcard-meaning {
+    font-size: 1.4rem;
+  }
+  .flashcard-example {
+    font-size: 0.88rem;
+  }
+
+  /* SRS Actions (2x2 grid for mobile) */
+  .srs-actions {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .btn-srs {
+    padding: 14px 10px;
+  }
+  .srs-btn-label { font-size: 1rem; }
+
+  /* Quiz Question */
+  .quiz-question {
+    font-size: 1.4rem;
+    padding: 18px 14px;
+    border-radius: var(--radius-md);
+  }
+  .quiz-option {
+    padding: 14px 16px;
+    font-size: 0.95rem;
+  }
+
+  /* Typing Mode */
+  .typing-prompt { padding: 18px 14px; }
+  .typing-meaning { font-size: 1.35rem; }
+  .typing-input {
+    font-size: 1.25rem !important;
+    padding: 12px 14px;
+  }
+
+  /* Matching Grid on Mobile */
+  .matching-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .matching-tile {
+    min-height: 80px;
+    padding: 12px 6px;
+  }
+  .matching-tile-text { font-size: 0.88rem; }
+
+  /* Bottom Modals (Sheet-like for mobile) */
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal {
+    max-width: 100%;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    max-height: 88vh;
+    animation: slideUp 0.25s cubic-bezier(0.1, 0.9, 0.2, 1);
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .modal-header {
+    padding: 16px 20px;
+  }
+  .modal-body {
+    padding: 16px 20px max(20px, env(safe-area-inset-bottom));
+  }
+
+  /* Search & Header Actions */
+  .card-list-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .search-input {
+    flex: 1;
+    width: auto;
+  }
+
+  /* Settings on Mobile */
+  .settings-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .settings-item-control {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
+
