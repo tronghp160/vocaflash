@@ -49,7 +49,7 @@ export async function createNewSyncSlot() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: 'vocaflash_sync_data',
-        data: payload,
+        data: { content: JSON.stringify(payload) },
       }),
     });
 
@@ -59,7 +59,7 @@ export async function createNewSyncSlot() {
 
     setSyncKey(result.id);
     updateLastSyncTime();
-    return { success: true, syncId: result.id, message: `Đã tạo Mã Đồng Bộ mới thành công!` };
+    return { success: true, syncId: result.id, message: `Đã tạo Mã Đồng Bộ mới: ${result.id}` };
   } catch (e) {
     return { success: false, message: e.message || 'Lỗi tạo mã đồng bộ' };
   }
@@ -92,7 +92,7 @@ export async function pushToCloud() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: 'vocaflash_sync_data',
-        data: payload,
+        data: { content: JSON.stringify(payload) },
       }),
     });
 
@@ -132,7 +132,8 @@ export async function pullFromCloud() {
       throw new Error('Dữ liệu trên đám mây không hợp lệ');
     }
 
-    const data = result.data;
+    const rawData = result.data;
+    const data = typeof rawData.content === 'string' ? JSON.parse(rawData.content) : rawData;
 
     if (data.decks && Array.isArray(data.decks)) {
       localStorage.setItem('vocaFlash_decks', JSON.stringify(data.decks));
