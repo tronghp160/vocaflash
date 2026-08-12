@@ -1,12 +1,12 @@
 // cloud.js — Realtime Cloud Synchronization Engine for VocaFlash
 
-import { getDecks, getCards, getSettings, getHistory, saveDeck, saveCard, saveSettings, getCardsByDeck } from './data.js';
+import { getDecks, getCards, getSettings, getHistory } from './data.js';
 
 const SYNC_KEY_STORAGE = 'vocaFlash_syncKey';
 const LAST_SYNC_STORAGE = 'vocaFlash_lastSyncTime';
 
-// Firebase Realtime DB open endpoint for Sync Key storage
-const CLOUD_API_BASE = 'https://vocaflash-sync-default-rtdb.firebaseio.com/syncKeys';
+const APP_PREFIX = 'vocaflash_app_2026';
+const CLOUD_BASE = 'https://keyvalue.immanuel.co/api/KeyVal';
 
 export function getSyncKey() {
   return localStorage.getItem(SYNC_KEY_STORAGE) || '';
@@ -32,6 +32,19 @@ function updateLastSyncTime() {
   return now;
 }
 
+// Unicode-safe Base64 encoder/decoder
+function utf8ToBase64(str) {
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+    return String.fromCharCode('0x' + p1);
+  }));
+}
+
+function base64ToUtf8(str) {
+  return decodeURIComponent(Array.prototype.map.call(atob(str), (c) => {
+    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+  }).join(''));
+}
+
 /**
  * Push local data to cloud
  */
@@ -48,18 +61,19 @@ export async function pushToCloud() {
       history: getHistory(),
     };
 
-    const res = await fetch(`${CLOUD_API_BASE}/${encodeURIComponent(syncKey)}.json`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const jsonStr = JSON.stringify(payload);
+    const base64Data = utf8ToBase64(jsonStr);
+    const encodedVal = encodeURIComponent(base64Data);
 
-    if (!res.ok) throw new Error('Không thể tải dữ liệu lên đám mây');
+    const updateUrl = `${CLOUD_BASE}/UpdateValue/${APP_PREFIX}/${encodeURIComponent(syncKey)}/${encodedVal}`;
+    const res = await fetch(updateUrl, { method: 'POST' });
+
+    if (!res.ok) throw new Error('Không thể kết nối đến máy chủ đám mây');
 
     updateLastSyncTime();
-    return { success: true, message: 'Đồng bộ đám mây thành công!' };
+    return { success: true, message: `Đã đẩy dữ liệu thành công với mã: "${syncKey}"` };
   } catch (e) {
-    return { success: false, message: e.message };
+    return { success: false, message: e.message || 'Không thể tải dữ liệu lên đám mây' };
   }
 }
 
@@ -71,13 +85,19 @@ export async function pullFromCloud() {
   if (!syncKey) return { success: false, message: 'Chưa cài đặt Mã Đồng Bộ' };
 
   try {
-    const res = await fetch(`${CLOUD_API_BASE}/${encodeURIComponent(syncKey)}.json`);
-    if (!res.ok) throw new Error('Không thể tải dữ liệu từ đám mây');
+    const getUrl = `${CLOUD_BASE}/GetValue/${APP_PREFIX}/${encodeURIComponent(syncKey)}`;
+    const res = await fetch(getUrl);
 
-    const data = await res.json();
-    if (!data) return { success: false, message: 'Mã Đồng Bộ mới (chưa có dữ liệu đám mây). Hãy bấm Đẩy Lên.' };
+    if (!res.ok) throw new Error('Không thể kết nối máy chủ đám mây');
 
-    // Merge decks & cards smartly
+    const base64Data = await res.json();
+    if (!base64Data || typeof base64Data !== 'string') {
+      return { success: false, message: `Mã "${syncKey}" mới (chưa có dữ liệu trên đám mây). Hãy bấm Đẩy Lên.` };
+    }
+
+    const jsonStr = base64ToUtf8(base64Data);
+    const data = JSON.parse(jsonStr);
+
     if (data.decks && Array.isArray(data.decks)) {
       localStorage.setItem('vocaFlash_decks', JSON.stringify(data.decks));
     }
@@ -92,21 +112,21 @@ export async function pullFromCloud() {
     }
 
     updateLastSyncTime();
-    return { success: true, message: 'Tải dữ liệu đồng bộ thành công!' };
+    return { success: true, message: `Tải thành công dữ liệu mã: "${syncKey}"` };
   } catch (e) {
-    return { success: false, message: e.message };
+    return { success: false, message: e.message || 'Không thể tải dữ liệu từ đám mây' };
   }
 }
 
 /**
- * Auto sync: pulls first, then pushes
+ * Auto sync: pulls first, then pushes if cloud is empty
  */
 export async function autoSync() {
   const syncKey = getSyncKey();
   if (!syncKey) return;
 
-  // Try to pull first
-  await pullFromCloud();
-  // Then push current local state to keep both aligned
-  await pushToCloud();
+  const pullRes = await pullFromCloud();
+  if (!pullRes.success && pullRes.message.includes('chưa có dữ liệu')) {
+    await pushToCloud();
+  }
 }
