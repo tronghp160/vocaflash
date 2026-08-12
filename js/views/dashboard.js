@@ -83,10 +83,10 @@ export function renderDashboard(container) {
             const deckCards = allCards.filter(c => c.deckId === deck.id);
             const deckDue = deckCards.filter(c => isDue(c)).length;
             return `
-              <div class="deck-card" data-id="${deck.id}" style="--deck-color: ${deck.color || '#6C5CE7'}">
+              <a href="#deck/${deck.id}" class="deck-card" data-id="${deck.id}" style="--deck-color: ${deck.color || '#6C5CE7'}">
                 <div class="deck-color-bar"></div>
                 <div class="deck-card-body">
-                  <h3 class="deck-name">${escapeHtml(deck.name)}</h3>
+                  <h3 class="deck-name">${escapeHtml(deck.name || 'Bộ thẻ mới')}</h3>
                   <p class="deck-desc">${escapeHtml(deck.description || '')}</p>
                   <div class="deck-meta">
                     <span>${deckCards.length} thẻ</span>
@@ -96,7 +96,7 @@ export function renderDashboard(container) {
                 <div class="deck-card-actions">
                   <button class="btn btn-ghost btn-xs btn-deck-delete" data-id="${deck.id}" title="Xóa">🗑️</button>
                 </div>
-              </div>
+              </a>
             `;
           }).join('')}
         </div>
@@ -135,17 +135,6 @@ export function renderDashboard(container) {
       </div>
     </div>
   `;
-
-  // Event: Click deck card
-  container.querySelectorAll('.deck-card').forEach(card => {
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('.btn-deck-delete')) return;
-      const deckId = card.getAttribute('data-id') || card.dataset.id || card.dataset.deckId;
-      if (deckId && deckId !== 'undefined') {
-        location.hash = `#deck/${deckId}`;
-      }
-    });
-  });
 
   // Event: Quick SRS
   container.querySelector('#btnQuickSRS')?.addEventListener('click', () => {

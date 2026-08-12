@@ -179,11 +179,19 @@ function save(key, data) {
 // ─── DECKS ──────────────────────────────────────────────
 export function getDecks() {
   let decks = load(KEYS.decks);
-  if (!decks || decks.length === 0) {
+  if (!decks || !Array.isArray(decks) || decks.length === 0) {
     save(KEYS.decks, SAMPLE_DECKS);
     save(KEYS.cards, SAMPLE_CARDS);
     return SAMPLE_DECKS;
   }
+  let modified = false;
+  decks.forEach(d => {
+    if (!d.id || typeof d.id !== 'string') {
+      d.id = generateId('deck');
+      modified = true;
+    }
+  });
+  if (modified) save(KEYS.decks, decks);
   return decks;
 }
 
