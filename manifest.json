@@ -1,0 +1,18 @@
+{
+  "name": "VocaFlash — Học Từ Vựng",
+  "short_name": "VocaFlash",
+  "description": "Ứng dụng học từ vựng tiếng Anh cá nhân với Flashcard, SRS, Quiz, Typing, Matching & Listening",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f0f14",
+  "theme_color": "#6c5ce7",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%236c5ce7'/><text y='.85em' x='10' font-size='80'>⚡</text></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
